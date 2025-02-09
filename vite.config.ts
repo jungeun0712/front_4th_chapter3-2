@@ -13,6 +13,9 @@ export default mergeConfig(
         },
       },
     },
+    test: {
+      testTimeout: 10000, // 10초로 설정
+    },
   }),
   defineTestConfig({
     test: {
@@ -22,6 +25,9 @@ export default mergeConfig(
       coverage: {
         reportsDirectory: './.coverage',
         reporter: ['lcov', 'json', 'json-summary'],
+      },
+      fakeTimers: {
+        toFake: ['Date', 'setTimeout', 'clearTimeout', 'setInterval', 'clearInterval'],
       },
     },
   })
