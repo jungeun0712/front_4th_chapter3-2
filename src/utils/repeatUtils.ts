@@ -1,60 +1,81 @@
-export function getRepeatEvents(schedule: { startDate: Date; endDate: Date; type: string }) {
-  const { startDate, endDate, type } = schedule;
-  const recurringDates = [];
+export function getRepeatEvents(schedule: {
+  startDate: Date;
+  endDateOfString: string;
+  repeatType: string;
+  repeatInterval: number;
+}) {
+  const { startDate, endDateOfString, repeatType, repeatInterval } = schedule;
+
+  const endDate = new Date(endDateOfString);
+  if (repeatInterval < 1) {
+    throw new Error('반복 간격은 1 이상이어야 합니다.');
+  }
+
+  const repeatDates = [];
   let currentDate = new Date(startDate);
 
-  while (currentDate <= endDate) {
-    recurringDates.push(new Date(currentDate));
+  const getLastDayOfMonth = (date: Date) =>
+    new Date(date.getFullYear(), date.getMonth() + 1, 0).getDate();
 
-    switch (type) {
+  while (currentDate <= endDate) {
+    repeatDates.push(new Date(currentDate));
+
+    switch (repeatType) {
       case 'daily':
-        currentDate.setDate(currentDate.getDate() + 1);
+        currentDate.setDate(currentDate.getDate() + repeatInterval);
         break;
       case 'weekly':
-        currentDate.setDate(currentDate.getDate() + 7);
+        currentDate.setDate(currentDate.getDate() + 7 * repeatInterval);
         break;
       case 'monthly':
-        currentDate.setMonth(currentDate.getMonth() + 1);
+        // 현재 월에 repeatInterval 곱한 만큼 더함
+        let targetMonth = currentDate.getMonth() + repeatInterval;
+        const targetYear = currentDate.getFullYear() + Math.floor(targetMonth / 12);
+        targetMonth = targetMonth % 12;
+
+        currentDate.setFullYear(targetYear);
+        currentDate.setMonth(targetMonth);
+
+        // 월말 날짜 처리
+        const lastDayOfMonth = getLastDayOfMonth(currentDate);
+        if (currentDate.getDate() > lastDayOfMonth) {
+          currentDate.setDate(lastDayOfMonth);
+        } else {
+          currentDate.setDate(currentDate.getDate());
+        }
         break;
       case 'yearly':
-        currentDate.setFullYear(currentDate.getFullYear() + 1);
+        currentDate.setFullYear(currentDate.getFullYear() + repeatInterval);
+        if (currentDate.getMonth() === 1 && currentDate.getDate() === 29) {
+          const isLeapYear = (year: number) =>
+            (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+          if (!isLeapYear(currentDate.getFullYear())) {
+            currentDate.setDate(28);
+          }
+        }
         break;
       default:
         break;
     }
   }
 
-  return recurringDates;
+  return repeatDates;
 }
 
-export function getNextMonthlyDate(baseDate: Date, targetDate: Date) {
-  const nextDate = new Date(targetDate);
-  console.log(nextDate);
-  // 일자를 먼저 설정한 후 월을 변경
-  nextDate.setMonth(baseDate.getMonth());
-  // nextDate.setDate(baseDate.getDate()); // 자동 보정 방지
+export function getNextRepeatDate(baseDate: Date, targetDate: Date) {
+  // 현재 날짜의 일자를 가져옴
+  const currentDay = baseDate.getDate();
 
-  // 날짜가 변경된 경우 (예: 2월 29일 → 3월 1일), 해당 월의 마지막 날로 조정
-  if (nextDate.getMonth() !== baseDate.getMonth()) {
-    console.log(nextDate.getMonth(), baseDate.getMonth());
-    nextDate.setDate(0);
-  }
-  console.log(nextDate);
+  // 목표 연도와 월을 가져옴
+  const targetYear = targetDate.getFullYear();
+  const targetMonth = targetDate.getMonth();
 
-  return nextDate;
-}
+  // 목표 연월의 마지막 날짜를 계산
+  const lastDayOfMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
 
-export function getNextYearlyDate(baseDate: Date, targetDate: Date) {
-  const nextDate = new Date(targetDate);
-  // nextDate.setFullYear(baseDate.getFullYear());
-  // nextDate.setMonth(baseDate.getMonth());
-  // nextDate.setDate(baseDate.getDate());
+  // 현재 일자가 목표 월의 마지막 날짜보다 크면 마지막 날짜를 사용
+  const adjustedDay = Math.min(currentDay, lastDayOfMonth);
 
-  if (nextDate.getFullYear() !== baseDate.getFullYear()) {
-    nextDate.setFullYear(nextDate.getFullYear());
-    nextDate.setMonth(nextDate.getMonth());
-    nextDate.setDate(0);
-  }
-  console.log(nextDate);
-  return nextDate;
+  // 새로운 날짜 객체 생성 및 반환
+  return new Date(targetYear, targetMonth, adjustedDay);
 }

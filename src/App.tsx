@@ -4,6 +4,7 @@ import {
   ChevronRightIcon,
   DeleteIcon,
   EditIcon,
+  RepeatIcon,
 } from '@chakra-ui/icons';
 import {
   Alert,
@@ -56,6 +57,7 @@ import {
 } from './utils/dateUtils';
 import { findOverlappingEvents } from './utils/eventOverlap';
 import { getTimeErrorMessage } from './utils/timeValidation';
+import { getRepeatEvents } from './utils/repeatUtils.js';
 
 const categories = ['업무', '개인', '가족', '기타'];
 
@@ -167,6 +169,35 @@ function App() {
 
   const renderWeekView = () => {
     const weekDates = getWeekDates(currentDate);
+
+    // 반복 일정과 일반 일정을 날짜별로 합치는 함수
+    const getEventsForDate = (date: Date) => {
+      // 1. 일반 일정 필터링
+      const regularEvents = filteredEvents.filter(
+        (event) => new Date(event.date).toDateString() === date.toDateString()
+      );
+
+      // 2. 반복 일정 필터링
+      const repeatEvents: Event[] = filteredEvents
+        .filter((event) => event.repeat && event.repeat.type !== 'none') // 반복 일정만 선택
+        .filter((event) => {
+          const repeatDates = getRepeatEvents({
+            startDate: new Date(event.date),
+            endDateOfString: event.repeat.endDate || '', // 종료일이 있는 경우
+            repeatType: event.repeat.type,
+            repeatInterval: event.repeat.interval || 1,
+          });
+
+          // 현재 날짜가 반복 일정에 포함되는지 확인
+          return repeatDates.some(
+            (repeatDate: Date) => repeatDate.toDateString() === date.toDateString()
+          );
+        });
+
+      // 3. 일반 일정과 반복 일정 합치기
+      return [...regularEvents, ...repeatEvents];
+    };
+
     return (
       <VStack data-testid="week-view" align="stretch" w="full" spacing={4}>
         <Heading size="md">{formatWeek(currentDate)}</Heading>
@@ -185,29 +216,30 @@ function App() {
               {weekDates.map((date) => (
                 <Td key={date.toISOString()} height="100px" verticalAlign="top" width="14.28%">
                   <Text fontWeight="bold">{date.getDate()}</Text>
-                  {filteredEvents
-                    .filter((event) => new Date(event.date).toDateString() === date.toDateString())
-                    .map((event) => {
-                      const isNotified = notifiedEvents.includes(event.id);
-                      return (
-                        <Box
-                          key={event.id}
-                          p={1}
-                          my={1}
-                          bg={isNotified ? 'red.100' : 'gray.100'}
-                          borderRadius="md"
-                          fontWeight={isNotified ? 'bold' : 'normal'}
-                          color={isNotified ? 'red.500' : 'inherit'}
-                        >
-                          <HStack spacing={1}>
-                            {isNotified && <BellIcon />}
-                            <Text fontSize="sm" noOfLines={1}>
-                              {event.title}
-                            </Text>
-                          </HStack>
-                        </Box>
-                      );
-                    })}
+                  {getEventsForDate(date).map((event) => {
+                    const isNotified = notifiedEvents.includes(event.id);
+                    const isRecurring = event.repeat.type !== 'none';
+
+                    return (
+                      <Box
+                        key={event.id}
+                        p={1}
+                        my={1}
+                        bg={isNotified ? 'red.100' : 'gray.100'}
+                        borderRadius="md"
+                        fontWeight={isNotified ? 'bold' : 'normal'}
+                        color={isNotified ? 'red.500' : 'inherit'}
+                      >
+                        <HStack spacing={1}>
+                          {isNotified && <BellIcon />}
+                          {isRecurring && <RepeatIcon />} {/* 반복 일정 아이콘 */}
+                          <Text fontSize="sm" noOfLines={1}>
+                            {event.title}
+                          </Text>
+                        </HStack>
+                      </Box>
+                    );
+                  })}
                 </Td>
               ))}
             </Tr>
@@ -219,6 +251,36 @@ function App() {
 
   const renderMonthView = () => {
     const weeks = getWeeksAtMonth(currentDate);
+
+    // 일반 일정과 반복 일정을 모두 포함하여 특정 날짜의 일정을 가져오는 함수
+    const getAllEventsForDay = (day: number) => {
+      if (!day) return [];
+
+      const dateString = formatDate(currentDate, day);
+      const targetDate = new Date(dateString);
+
+      // 1. 일반 일정 필터링
+      const regularEvents = filteredEvents.filter((event) => {
+        const eventDate = new Date(event.date);
+        return eventDate.toDateString() === targetDate.toDateString();
+      });
+
+      // 2. 반복 일정 필터링
+      const repeatEvents = filteredEvents
+        .filter((event) => event.repeat && event.repeat.type !== 'none')
+        .filter((event) => {
+          const repeatDates = getRepeatEvents({
+            startDate: new Date(event.date),
+            endDateOfString: event.repeat.endDate || '',
+            repeatType: event.repeat.type,
+            repeatInterval: event.repeat.interval || 1,
+          });
+
+          return repeatDates.some((date) => date.toDateString() === targetDate.toDateString());
+        });
+
+      return [...regularEvents, ...repeatEvents];
+    };
 
     return (
       <VStack data-testid="month-view" align="stretch" w="full" spacing={4}>
@@ -239,6 +301,7 @@ function App() {
                 {week.map((day, dayIndex) => {
                   const dateString = day ? formatDate(currentDate, day) : '';
                   const holiday = holidays[dateString];
+                  const eventsForDay = day !== null ? getAllEventsForDay(day) : [];
 
                   return (
                     <Td
@@ -256,8 +319,11 @@ function App() {
                               {holiday}
                             </Text>
                           )}
-                          {getEventsForDay(filteredEvents, day).map((event) => {
+                          {eventsForDay.map((event) => {
+                            console.log(notifiedEvents);
                             const isNotified = notifiedEvents.includes(event.id);
+                            const isRecurring = event.repeat.type !== 'none';
+
                             return (
                               <Box
                                 key={event.id}
@@ -270,6 +336,7 @@ function App() {
                               >
                                 <HStack spacing={1}>
                                   {isNotified && <BellIcon />}
+                                  {isRecurring && <RepeatIcon />} {/* 반복 일정 아이콘 */}
                                   <Text fontSize="sm" noOfLines={1}>
                                     {event.title}
                                   </Text>

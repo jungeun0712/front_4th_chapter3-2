@@ -1,53 +1,20 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { fireEvent, render, screen } from '@testing-library/react';
+import { describe, it, expect } from 'vitest';
 
-import { Event } from '../../types';
-import { getNextMonthlyDate, getNextYearlyDate, getRepeatEvents } from '../../utils/repeatUtils';
+import App from '../../App';
+import { getNextRepeatDate, getRepeatEvents } from '../../utils/repeatUtils';
 
-describe('getRepeatedEvents', () => {
-  const events: Event[] = [
-    {
-      id: '1',
-      title: '이벤트 1',
-      date: '2023-05-10',
-      startTime: '10:00',
-      endTime: '11:00',
-      description: '',
-      location: '',
-      category: '',
-      repeat: { type: 'daily', interval: 1 },
-      notificationTime: 10,
-    },
-    {
-      id: '2',
-      title: '이벤트 2',
-      date: '2023-05-10',
-      startTime: '14:00',
-      endTime: '15:00',
-      description: '',
-      location: '',
-      category: '',
-      repeat: { type: 'weekly', interval: 1 },
-      notificationTime: 30,
-    },
-    {
-      id: '3',
-      title: '이벤트 3',
-      date: '2023-05-11',
-      startTime: '09:00',
-      endTime: '10:00',
-      description: '',
-      location: '',
-      category: '',
-      repeat: { type: 'monthly', interval: 1 },
-      notificationTime: 60,
-    },
-  ];
+describe('반복 일정 삭제', () => {
+  it('반복 일정을 삭제하면 해당 일정만 삭제된다', () => {});
+});
 
+describe('반복 유형 선택 테스트', () => {
   it('매일 반복 일정이 정상적으로 생성되어야 한다', () => {
     const schedule = {
       startDate: new Date(), // setupTests에서 설정한 2024-10-01 사용
-      endDate: new Date('2024-10-05'),
-      type: 'daily',
+      endDateOfString: '2024-10-05',
+      repeatType: 'daily',
+      repeatInterval: 1,
     };
 
     const repeatDates = getRepeatEvents(schedule);
@@ -62,8 +29,9 @@ describe('getRepeatedEvents', () => {
   it('매주 반복 일정이 정상적으로 생성되어야 한다', () => {
     const schedule = {
       startDate: new Date(),
-      endDate: new Date('2024-10-22'),
-      type: 'weekly',
+      endDateOfString: '2024-10-22',
+      repeatType: 'weekly',
+      repeatInterval: 1,
     };
 
     const repeatDates = getRepeatEvents(schedule);
@@ -78,25 +46,28 @@ describe('getRepeatedEvents', () => {
   it('매월 반복 일정이 정상적으로 생성되어야 한다', () => {
     const schedule = {
       startDate: new Date(),
-      endDate: new Date('2024-12-01'),
-      type: 'monthly',
+      endDateOfString: '2024-12-14',
+      repeatType: 'monthly',
+      repeatInterval: 1,
     };
 
     const repeatDates = getRepeatEvents(schedule);
 
     expect(repeatDates).toHaveLength(3);
+
+    const expectedDates = [new Date('2024-10-01'), new Date('2024-11-01'), new Date('2024-12-01')];
+
     repeatDates.forEach((date: Date, index: number) => {
-      const expectedDate = new Date('2024-10-01');
-      expectedDate.setMonth(expectedDate.getMonth() + index);
-      expect(date.getTime()).toBe(expectedDate.getTime());
+      expect(date.getTime()).toBe(expectedDates[index].getTime());
     });
   });
 
   it('매년 반복 일정이 정상적으로 생성되어야 한다', () => {
     const schedule = {
       startDate: new Date(),
-      endDate: new Date('2026-10-01'),
-      type: 'yearly',
+      endDateOfString: '2026-10-01',
+      repeatType: 'yearly',
+      repeatInterval: 1,
     };
 
     const repeatDates = getRepeatEvents(schedule);
@@ -110,47 +81,86 @@ describe('getRepeatedEvents', () => {
   });
 });
 
-describe('윤년 날짜 반복 테스트', () => {
+// 윤년/31월일 경우 반복 설정
+describe('윤년/31월일 경우 반복 ', () => {
   describe('윤년의 2월 29일 매월 반복 생성한다.', () => {
     const leapYearFeb29 = new Date('2024-02-29'); // 2024년은 윤년
 
     it('평년 2월에는 28일로 설정되어야 한다', () => {
-      const nextYear = new Date('2025-02-28'); // 2025년 2월 (평년)
-      const result = getNextMonthlyDate(leapYearFeb29, nextYear);
-      console.log(result);
+      const newDate = new Date('2025-02-28'); // 2025년 2월 (평년)
+      const result = getNextRepeatDate(leapYearFeb29, newDate);
       expect(result.getFullYear()).toBe(2025);
       expect(result.getMonth()).toBe(1);
       expect(result.getDate()).toBe(28);
     });
 
     it('다른 달에는 29일로 설정되어야 한다', () => {
-      const nextMonth = new Date('2024-03-29');
-      const result = getNextMonthlyDate(leapYearFeb29, nextMonth);
+      const newDate = new Date('2024-03-29');
+      const result = getNextRepeatDate(leapYearFeb29, newDate);
 
       expect(result.getMonth()).toBe(2);
       expect(result.getDate()).toBe(29);
     });
   });
 
-  describe('윤년의 2월 29일 매년 반복 생성한다', () => {
-    const leapYearFeb29 = new Date('2024-02-29'); // 2024년은 윤년
+  describe('반복 일정이 31일일 경우 해당 달의 마지막 날짜로 설정한다.', () => {
+    const leapYearFeb29 = new Date('2024-03-31'); // 2024년은 윤년
 
-    it('평년에는 2월 28일로 설정되어야 한다', () => {
-      const nextYear = new Date('2025-02-01');
-      const result = getNextYearlyDate(leapYearFeb29, nextYear);
+    it('4,6,9,11에는 30일로 설정되어야 한다', () => {
+      const newDate = new Date('2024-04-30');
+      const result = getNextRepeatDate(leapYearFeb29, newDate);
 
-      expect(result.getFullYear()).toBe(2025);
-      expect(result.getMonth()).toBe(2);
-      expect(result.getDate()).toBe(28);
-    });
-
-    it('다음 윤년에는 2월 29일로 설정되어야 한다', () => {
-      const nextLeapYear = new Date('2028-02-01');
-      const result = getNextYearlyDate(leapYearFeb29, nextLeapYear);
-
-      expect(result.getFullYear()).toBe(2028);
-      expect(result.getMonth()).toBe(2);
-      expect(result.getDate()).toBe(29);
+      expect(result.getMonth()).toBe(3);
+      expect(result.getDate()).toBe(30);
     });
   });
+});
+
+// 반복 간격
+describe('반복 간격 테스트', () => {
+  it('2일마다 반복되는 일정을 생성해야 한다', () => {
+    const schedule = {
+      startDate: new Date(),
+      endDateOfString: '2024-10-05',
+      repeatType: 'daily',
+      repeatInterval: 2,
+    };
+
+    const dates = getRepeatEvents(schedule);
+
+    expect(dates).toHaveLength(3);
+    expect(dates[0].toISOString()).toBe(new Date('2024-10-01').toISOString());
+    expect(dates[1].toISOString()).toBe(new Date('2024-10-03').toISOString());
+    expect(dates[2].toISOString()).toBe(new Date('2024-10-05').toISOString());
+  });
+
+  it('반복 간격이 1보다 작으면 에러를 발생시킨다', () => {
+    const schedule = {
+      startDate: new Date(),
+      endDateOfString: '2024-10-05',
+      repeatType: 'daily',
+      repeatInterval: 0,
+    };
+
+    expect(() => getRepeatEvents(schedule)).toThrow('반복 간격은 1 이상이어야 합니다.');
+  });
+});
+
+// 반복 종료
+describe('종료 조건 테스트', () => {
+  it('특정 날짜까지 반복되는 일정을 생성할 수 있다', () => {});
+
+  it('종료 날짜가 시작 날짜보다 이전이면 에러를 발생시킨다', () => {});
+});
+
+// 반복 일정 단일 수정
+describe('반복 일정 단일 수정 테스트', () => {
+  it('반복 일정을 수정하면 단일 일정으로 변경된다', () => {});
+
+  it('반복 일정이 단일 일정으로 변경되면 아이콘이 사라진다', () => {});
+});
+
+// 반복 일정 삭제
+describe('반복 일정 삭제', () => {
+  it('반복 일정을 삭제하면 해당 일정만 삭제된다', () => {});
 });
